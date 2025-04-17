@@ -54,10 +54,11 @@ def read_text_file(filepath,col_names):
     )
     return df
 
-def total_atmospheric_trans(freq,lwp,df_k):
+def total_atmospheric_trans(freq, lwp, df_liq_water, df_wv_gases, cwv = 14, theta = 0):
     """
     Function to determine the total atmospheric transmission by using 
-    the given extinction cross sections at a given frequency
+    the given mass extinction coefficients at a given frequency. 
+    Incorporates optical depth due to gases (WV and others) and liquid water at 0C.
 
     Parameters
     ----------
@@ -66,9 +67,18 @@ def total_atmospheric_trans(freq,lwp,df_k):
 
     lwp : float
         liquid water path in kg/m^2
-
-    df_k : pd.DataFrame
-        table of extinction cross section by frequency
+    
+    df_liq_water : pd.DataFrame
+        table of mass extinction coefficients by frequency for liquid water at 0C
+    
+    df_wv_gases : pd.Dataframe
+        table of mass extinction coefficients by frequency for water vapor and other gases 
+    
+    cwv : float
+        the column water vapor in kg/m^2. Default is 14 for a U.S. Standard Atmosphere
+    
+    theta : float
+        the angle off nadir that the satellite is detecting radiance from, in degrees. Defaults to 0 (nadir)
 
     Returns
     -------
@@ -76,8 +86,24 @@ def total_atmospheric_trans(freq,lwp,df_k):
         total atmospheric transmission
     
     """
-    k_nu = np.interp(freq, df_k['freq_GHz'], df_k['mass_abs'])
-    return np.exp((-1 * k_nu) * lwp)
+    # Cloud mass extinction coefficient
+    k_liq_water = np.interp(freq, df_liq_water['freq_GHz'], df_liq_water['mass_abs'])
+
+    # Water vapor mass extinction coefficient
+    k_wv = np.interp(freq, df_wv_gases['freq_GHz'], df_wv_gases['wv_abs'])
+
+    # Dry air optical depth
+    tau_dry_air = np.interp(freq, df_wv_gases['freq_GHz'], df_wv_gases['dry_air_tau'])
+
+    # convert degrees to radians
+    theta = np.radians(theta)
+    mu = np.cos(theta)
+
+    # Calculate total atmospheric transmission (t_star)
+    t_star = np.exp(-1 * (k_liq_water*lwp + k_wv*cwv + tau_dry_air)/mu)
+
+    return t_star
+
 
 def tb_polarization(lst, cloud_temp, freq, t_star, lss = 0, theta = 0):
     '''Calculate the brightness temperatures of the lake surface for different polarizations
