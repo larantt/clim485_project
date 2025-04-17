@@ -136,16 +136,10 @@ def brightness_temp_uncertainty(TB,variable,delta_variable):
 def total_sensitivity():
     pass
 
-<<<<<<< HEAD
 def total_uncertainty(NEDT,dTB_dLST,dTB_dLWP,delta_LWP):
-=======
-def total_uncertainty(NEDT,dTB_dLST,dTB_dLWP,dTB_dTclear,delta_LWP,delta_Tclear):
->>>>>>> cb91884922c88dfb3449c0626115ee1adbf460ec
     """
     Function calculates the total additive uncertainty for the 
     brightness temperature
-
-    NOTE: ask what delta_LWP and delta_Tclear are
 
     Parameters
     ----------
@@ -155,17 +149,8 @@ def total_uncertainty(NEDT,dTB_dLST,dTB_dLWP,dTB_dTclear,delta_LWP,delta_Tclear)
         sensitivity of brightness temperature to surface temperature
     dTB_dLWP : float
         sensitivity of brightness temperature to liquid water path
-<<<<<<< HEAD
     delta_LWP : float
 
-=======
-    dTB_dTclear : float
-        sensitivity of brightness temperature to clear sky transmission
-    delta_LWP : float
-
-    delta_Tclear : float
-
->>>>>>> cb91884922c88dfb3449c0626115ee1adbf460ec
     Returns
     -------
     sigma_LST : float
@@ -173,12 +158,6 @@ def total_uncertainty(NEDT,dTB_dLST,dTB_dLWP,dTB_dTclear,delta_LWP,delta_Tclear)
     """
     term_1 = (NEDT**2) * (dTB_dLST**-2)
     term_2 = (delta_LWP**2) * (dTB_dLWP**2) * (dTB_dLST**-2)
-<<<<<<< HEAD
-
     sigma_LST = np.sqrt(term_1 + term_2)
-=======
-    term_3 = (delta_Tclear**2) * (dTB_Tclear**2) * (dTB_dLST**-2)
 
-    sigma_LST = term_1 + term_2 + term_3
->>>>>>> cb91884922c88dfb3449c0626115ee1adbf460ec
     return sigma_LST
