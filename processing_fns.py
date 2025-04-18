@@ -54,10 +54,11 @@ def read_text_file(filepath,col_names):
     )
     return df
 
-def total_atmospheric_trans(freq,lwp,df_k):
+def total_atmospheric_trans(freq, lwp, df_liq_water, df_wv_gases, cwv = 14, theta = 0):
     """
     Function to determine the total atmospheric transmission by using 
-    the given extinction cross sections at a given frequency
+    the given mass extinction coefficients at a given frequency. 
+    Incorporates optical depth due to gases (WV and others) and liquid water at 0C.
 
     Parameters
     ----------
@@ -66,9 +67,18 @@ def total_atmospheric_trans(freq,lwp,df_k):
 
     lwp : float
         liquid water path in kg/m^2
-
-    df_k : pd.DataFrame
-        table of extinction cross section by frequency
+    
+    df_liq_water : pd.DataFrame
+        table of mass extinction coefficients by frequency for liquid water at 0C
+    
+    df_wv_gases : pd.Dataframe
+        table of mass extinction coefficients by frequency for water vapor and other gases 
+    
+    cwv : float
+        the column water vapor in kg/m^2. Default is 14 for a U.S. Standard Atmosphere
+    
+    theta : float
+        the angle off nadir that the satellite is detecting radiance from, in degrees. Defaults to 0 (nadir)
 
     Returns
     -------
@@ -76,10 +86,26 @@ def total_atmospheric_trans(freq,lwp,df_k):
         total atmospheric transmission
     
     """
-    k_nu = np.interp(freq, df_k['freq_GHz'], df_k['mass_abs'])
-    return np.exp((-1 * k_nu) * lwp)
+    # Cloud mass extinction coefficient
+    k_liq_water = np.interp(freq, df_liq_water['freq_GHz'], df_liq_water['mass_abs'])
 
-def tb_polarization(lst, cloud_temp, freq, t_star, lss = 0, theta = 0):
+    # Water vapor mass extinction coefficient
+    k_wv = np.interp(freq, df_wv_gases['freq_GHz'], df_wv_gases['wv_abs'])
+
+    # Dry air optical depth
+    tau_dry_air = np.interp(freq, df_wv_gases['freq_GHz'], df_wv_gases['dry_air_tau'])
+
+    # convert degrees to radians
+    theta = np.radians(theta)
+    mu = np.cos(theta)
+
+    # Calculate total atmospheric transmission (t_star)
+    t_star = np.exp(-1 * (k_liq_water*lwp + k_wv*cwv + tau_dry_air)/mu)
+
+    return t_star
+
+
+def tb_polarization(lst, freq, t_star, cloud_temp = 273.15, lss = 0, theta = 0):
     '''Calculate the brightness temperatures of the lake surface for different polarizations
    
     PARAMETERS
@@ -88,9 +114,9 @@ def tb_polarization(lst, cloud_temp, freq, t_star, lss = 0, theta = 0):
         lake surface temperature (Celsius)
     cloud_temp: float
         temperature of the cloud deck (isothermal assumption, in Kelvin)
-    freq: float
+    freq: float or numpy array
         frequency observed (GHz)
-    t_star : float
+    t_star : float or numpy array
         total atmospheric transmission
     lss: float
         lake surface salinity (ppt)
@@ -101,47 +127,80 @@ def tb_polarization(lst, cloud_temp, freq, t_star, lss = 0, theta = 0):
     Returns the brightness temperature of the lake surface for each polarization'''
 
     # Calculate the reflectances for the polarizations
-    Rv, Rh = ocean_R(lst, lss, freq, theta)
+    Rv, Rh = ocean_R(lst, lss, np.array(freq), theta)
 
     tb_Rv = (1-Rv)*(lst+273.15)*t_star + (1-t_star)*cloud_temp
     tb_Rh = (1-Rh)*(lst+273.15)*t_star + (1-t_star)*cloud_temp
 
     return tb_Rv, tb_Rh
 
-def brightness_temp_uncertainty(TB,variable,delta_variable):
-    """
-    Function uses central differencing to determine the uncertainty on 
-    a given variable
-
-    Parameters
-    ----------
-    TB : float
-        brightness temperature
-    variable : float
-        denominator of the uncertainty
-    delta_variable : float
-        difference from the center for a given variable
-
-    Return
-    ------
-    dTB_dVar : float
-        sensitivity of brightness temperature to a given variable
-    """
-
-    numerator = (TB * (variable + delta_variable) ) - (TB * (variable - delta_variable) )
+def tb_sensitivity_lst(lst, delta_lst, freq, t_star):
+    '''Calculate the sensitivity of brightness temperature to salinity for each polarization
     
-    dTB_dVar = numerator/(2 * delta_variable)
-    return dTB_dVar
+     PARAMETERS
+    ----------
+    sst: float
+        lake surface temperature (Celsius)
+    delta_lst : float
+        small change in lst used to compute the central difference derivative
+    freq: float or numpy array
+        frequency observed (GHz)
+    t_star : float or numpy array
+        total atmospheric transmission
+    
+    Returns the partial derivatives of brightness temperature with respect to LST for each polarization'''
 
-def total_sensitivity():
-    pass
+    # Calculate brightness temperatures at each frequency for positive delta_lst and negative delta_lst
+    tb_Rv_posdlst, tb_Rh_posdlst = tb_polarization(lst+delta_lst, np.array(freq), t_star)
+    tb_Rv_negdlst, tb_Rh_negdlst = tb_polarization(lst-delta_lst, np.array(freq), t_star)
 
-def total_uncertainty(NEDT,dTB_dLST,dTB_dLWP,dTB_dTclear,delta_LWP,delta_Tclear):
+    # Setup finite difference approach to estimate the sensitivity of the brightness temperature to lst
+    dtb_dlst_Rv =  (tb_Rv_posdlst - tb_Rv_negdlst)/(2*delta_lst)
+    dtb_dlst_Rh =  (tb_Rh_posdlst - tb_Rh_negdlst)/(2*delta_lst)
+
+    return dtb_dlst_Rv, dtb_dlst_Rh
+
+def tb_sensitivity_lwp(lst, lwp, delta_lwp, freq, df_liq_water, df_wv_gases, cwv = 14, theta = 0):
+    '''Calculate the sensitivity of brightness temperature to salinity for each polarization
+    
+     PARAMETERS
+    ----------
+    sst: float
+        lake surface temperature (Celsius)
+    delta_lwp : float
+        small change in lwp used to compute the central difference derivative
+    freq: float or numpy array
+        frequency observed (GHz)
+    df_liq_water : pd.DataFrame
+        table of mass extinction coefficients by frequency for liquid water at 0C
+    df_wv_gases : pd.Dataframe
+        table of mass extinction coefficients by frequency for water vapor and other gases 
+    cwv : float
+        the column water vapor in kg/m^2. Default is 14 for a U.S. Standard Atmosphere
+    theta : float
+        the angle off nadir that the satellite is detecting radiance from, in degrees. Defaults to 0 (nadir)
+    
+    Returns the partial derivatives of brightness temperature with respect to LST for each polarization'''
+
+    # Calculate transmission for positive and negative delta_lwp
+    t_star_posdlwp = total_atmospheric_trans(freq, lwp+delta_lwp, df_liq_water, df_wv_gases, cwv = 14, theta = 0)
+    t_star_negdlwp = total_atmospheric_trans(freq, lwp-delta_lwp, df_liq_water, df_wv_gases, cwv = 14, theta = 0)
+
+    # Calculate brightness temperatures at each frequency for positive and negative delta_lwp
+    tb_Rv_posdlwp, tb_Rh_posdlwp = tb_polarization(lst, np.array(freq), np.array(t_star_posdlwp))
+    tb_Rv_negdlwp, tb_Rh_negdlwp = tb_polarization(lst, np.array(freq), np.array(t_star_negdlwp))
+
+    # Setup finite difference approach to estimate the sensitivity of the brightness temperature to lwp
+    dtb_dlwp_Rv =  (tb_Rv_posdlwp - tb_Rv_negdlwp)/(2*delta_lwp)
+    dtb_dlwp_Rh =  (tb_Rh_posdlwp - tb_Rh_negdlwp)/(2*delta_lwp)
+
+    return dtb_dlwp_Rv, dtb_dlwp_Rh
+
+
+def total_uncertainty(NEDT,dTB_dLST,dTB_dLWP,delta_LWP):
     """
     Function calculates the total additive uncertainty for the 
     brightness temperature
-
-    NOTE: ask what delta_LWP and delta_Tclear are
 
     Parameters
     ----------
@@ -151,11 +210,7 @@ def total_uncertainty(NEDT,dTB_dLST,dTB_dLWP,dTB_dTclear,delta_LWP,delta_Tclear)
         sensitivity of brightness temperature to surface temperature
     dTB_dLWP : float
         sensitivity of brightness temperature to liquid water path
-    dTB_dTclear : float
-        sensitivity of brightness temperature to clear sky transmission
     delta_LWP : float
-
-    delta_Tclear : float
 
     Returns
     -------
@@ -164,7 +219,6 @@ def total_uncertainty(NEDT,dTB_dLST,dTB_dLWP,dTB_dTclear,delta_LWP,delta_Tclear)
     """
     term_1 = (NEDT**2) * (dTB_dLST**-2)
     term_2 = (delta_LWP**2) * (dTB_dLWP**2) * (dTB_dLST**-2)
-    term_3 = (delta_Tclear**2) * (dTB_Tclear**2) * (dTB_dLST**-2)
+    sigma_LST = np.sqrt(term_1 + term_2)
 
-    sigma_LST = term_1 + term_2 + term_3
     return sigma_LST
