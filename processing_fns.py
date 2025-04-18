@@ -137,7 +137,7 @@ def tb_polarization(lst, freq, t_star, cloud_temp = 273.15, lss = 0, theta = 0):
 def tb_sensitivity_lst(lst, delta_lst, freq, t_star):
     '''Calculate the sensitivity of brightness temperature to salinity for each polarization
     
-     PARAMETERS
+    PARAMETERS
     ----------
     sst: float
         lake surface temperature (Celsius)
@@ -163,7 +163,7 @@ def tb_sensitivity_lst(lst, delta_lst, freq, t_star):
 def tb_sensitivity_lwp(lst, lwp, delta_lwp, freq, df_liq_water, df_wv_gases, cwv = 14, theta = 0):
     '''Calculate the sensitivity of brightness temperature to salinity for each polarization
     
-     PARAMETERS
+    PARAMETERS
     ----------
     sst: float
         lake surface temperature (Celsius)
