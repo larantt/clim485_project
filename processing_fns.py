@@ -127,7 +127,10 @@ def tb_polarization(lst, freq, t_star, cloud_temp = 273.15, lss = 0, theta = 0):
     Returns the brightness temperature of the lake surface for each polarization'''
 
     # Calculate the reflectances for the polarizations
-    Rv, Rh = ocean_R(lst, lss, np.array(freq), theta)
+    try:
+        Rv, Rh = ocean_R(lst, lss, np.array(freq), theta)
+    except:
+        Rv, Rh = ocean_R(lst, lss, freq, theta)
 
     tb_Rv = (1-Rv)*(lst+273.15)*t_star + (1-t_star)*cloud_temp
     tb_Rh = (1-Rh)*(lst+273.15)*t_star + (1-t_star)*cloud_temp
@@ -222,3 +225,6 @@ def total_uncertainty(NEDT,dTB_dLST,dTB_dLWP,delta_LWP):
     sigma_LST = np.sqrt(term_1 + term_2)
 
     return sigma_LST
+
+
+def fwd_model_rad(L_TOA,)
